@@ -42,11 +42,13 @@
      (card 'blue 2)
      (card 'green 1)
      (card 'red 3)))
-  (define all-cards (for/list ([color (in-list colors)]
+  (define all-cards (for*/list ([color (in-list colors)]
                                [number (in-list '(1 2 3 4 5))])
                       (card color number)))
   (for ([c (in-list all-cards)])
-    (check-eq? (playable? cards c) (member c playable-cards))))
+    (define expected (not (eq? (member c playable-cards) #f)))
+    ((if (member c playable-cards) check-true check-false)
+     (playable? cards c) c)))
 
 (struct/lens state
              (deck played discarded misplayed player-hands ; disjoint subsets of cards
@@ -73,27 +75,33 @@
   (cond [(<= 2 num-players 3) 5]
         [(<= 4 num-players 5) 4]))
 
+(define (state-deck-draw s p)
+  (let* ([deck (state-deck s)]
+         [new-card (car deck)]
+         [s (state-deck-set s (cdr deck))]
+         [s (lens-transform (hand-lens p) s (curry cons new-card))])
+         s))
+
 (define (random-deck) (shuffle (init-deck)))
 
 (define (init-game num-players deck)
-  (let*-values ([(hand-size) (hand-size-for-players num-players)]
-                [(deck player-hands)
-                 (for/fold ([deck deck] [hands '()])
-                           ([_ (in-range num-players)])
-                   (let-values ([(hand deck) (split-at deck hand-size)])
-                     (values deck (cons hand hands))
-                     ))]
-                )
-    (state deck
-           ;; played discarded misplayed
-           empty-card-set empty-card-set empty-card-set
-           player-hands 8 0)))
+  (let ([hand-size (hand-size-for-players num-players)]
+        [player-hands (for/list ([_ (in-range num-players)]) '())])
+    (for*/fold
+        ([s (state deck
+                   ;; played discarded misplayed
+                   empty-card-set empty-card-set empty-card-set
+                   player-hands 8 0)])
+        ([player (in-range num-players)]
+         [_ (in-range hand-size)])
+      (state-deck-draw s player))))
 
 (module+ test
   (random-seed 0)
   (for ([num-players (in-list '(2 3 4 5))])
-    (check-false (game-over? (init-game num-players (random-deck)))))
-  )
+    (let ([s (init-game num-players (random-deck))])
+      (check-false (game-over? s) (~v s))
+      )))
 (define (hand-lens player)
   (lens-compose
    (list-ref-lens player)
@@ -107,6 +115,7 @@
 
 ;; is card c playable in state s?
 (define (state-playable? s c)
+
   (playable? (state-played s) c))
 
 (define (game-over? s)
@@ -130,13 +139,6 @@
                         (eq? number-or-color
                              (cond [(color? number-or-color) (card-color c)]
                                    [else (card-number c)])))))
-
-(define (state-deck-draw s p)
-  (let* ([deck (state-deck s)]
-         [new-card (car deck)]
-         [s (state-deck-set (cdr deck))]
-         [s (lens-transform (hand-lens p) (curry cons new-card))])
-         s))
 
 (define (make-move s p action)
   (let/cc return

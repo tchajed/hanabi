@@ -131,9 +131,12 @@
                              (cond [(color? number-or-color) (card-color c)]
                                    [else (card-number c)])))))
 
-(define (state-deck-draw s)
-  (let ([deck (state-deck s)])
-    (values (cdr deck) (car deck))))
+(define (state-deck-draw s p)
+  (let* ([deck (state-deck s)]
+         [new-card (car deck)]
+         [s (state-deck-set (cdr deck))]
+         [s (lens-transform (hand-lens p) (curry cons new-card))])
+         s))
 
 (define (make-move s p action)
   (let/cc return
@@ -155,7 +158,8 @@
          (let* ([s (lens-transform h-lens s (curry remove c))]
                 [s (if (state-playable? s c)
                        (lens-transform state-played-lens s (curry add-played c))
-                       (lens-transform state-misplayed-lens s (curry add-played c)))])
+                       (lens-transform state-misplayed-lens s (curry add-played c)))]
+                [s (state-deck-draw s p)])
            (done s #f)))]
       [(discard c-idx)
        ;; TODO: merge with play
@@ -166,7 +170,8 @@
        (define c (list-ref (lens-view h-lens s) c-idx))
        (let* ([s (lens-transform h-lens s (curry remove c))]
               [s (lens-transform state-discarded-lens s (curry add-played c))]
-              [s (lens-transform state-hints-remaining-lens s (curry + 1))])
+              [s (lens-transform state-hints-remaining-lens s (curry + 1))]
+              [s (state-deck-draw s p)])
          (done s #f))]
       [(struct* hint ((player hinted-player) (number-or-color hint-val)))
        (let* ([target-hand (lens-view (hand-lens hinted-player) s)]

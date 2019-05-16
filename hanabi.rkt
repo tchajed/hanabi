@@ -4,11 +4,13 @@
 (require lens)
 
 (define colors '(yellow red blue green))
+(define (color? c) (member c colors))
 
 (struct/lens card (color number) #:transparent
              ;; TODO: add contracts for color and number
              )
 
+;; Lists as a data structure for a set of cards
 (define empty-card-set '())
 (define (playable? card-set c)
   (define (same-color? c2) (eq? (card-color c) (card-color c2)))
@@ -51,76 +53,13 @@
                    hints-remaining
                    current-player) #:transparent)
 
-(define (hand-lens player)
-  (lens-compose
-   (list-ref-lens player)
-   state-player-hands-lens))
-
-(define (state-num-players s)
-  (length (state-player-hands s)))
-
-(define (hand-size-for-players num-players)
-  (cond [(<= 2 num-players 3) 5]
-        [(<= 4 num-players 5) 4]))
-
-(define (state-hand-size s)
-  (hand-size-for-players (state-num-players s)))
-
-(define (game-over? s)
-  (define expected-hand-size (state-hand-size s))
-  (or
-   (>= (length (state-misplayed s)) 3)
-   (eq? (* 5 (length colors)) (num-played (state-played s)))
-   (andmap (lambda (cards) (< (length cards) expected-hand-size))
-           (state-player-hands s))))
-
+;; deck is a list of cards (in draw order)
+;; played, discarded, misplayed, and player-hands are card-sets.
+;;  They are represented with a list but access goes through the API above.
 ;; player-hands is a list of lists of cards
 ;; hints-remaining is an int in [0, 8]
+;; current-player is a player index
 
-;; actions
-(struct/lens play (card-idx) #:transparent)
-(struct/lens discard (card-idx) #:transparent)
-(struct/lens hint (number-or-color) #:transparent)
-
-(struct/lens invalid-move (reason) #:transparent)
-;; is card c playable in state s?
-(define (state-playable? s c)
-  (playable? (state-played s) c))
-
-(define (make-move s p action)
-  (let/cc return
-    (define (bad-move reason) (return (invalid-move reason)))
-    (define (done s) (return
-                      (lens-set state-current-player-lens s
-                                (modulo (+ p 1) (state-num-players s)))))
-    (unless (eq? (state-current-player s) p)
-      (bad-move "out-of-turn"))
-    (when (game-over? s) (done "game is over"))
-    (cond [(play? action)
-           (let ([c-idx (play-card-idx action)]
-                 [h-lens (hand-lens p)])
-             (when (>= c-idx (length (lens-view h-lens s)))
-               (bad-move "play index out-of-bounds"))
-             (define c (list-ref (lens-view h-lens s) c-idx))
-             (let* ([s (lens-transform h-lens s (curry remove c))]
-                    [s (if (state-playable? s c)
-                           (lens-transform state-played-lens s (curry add-played c))
-                           (lens-transform state-misplayed-lens s (curry add-played c)))])
-               s))]
-          [(discard? action)
-           ;; TODO: merge with play
-           (let ([c-idx (discard-card-idx action)]
-                 [h-lens (hand-lens p)])
-             (when (>= c-idx (length (lens-view h-lens s)))
-               (bad-move "discard index out-of-bounds"))
-             (when (eq? 8 (state-hints-remaining s))
-               (bad-move "cannot discard with full hints"))
-             (define c (list-ref (lens-view h-lens s) c-idx))
-             (let* ([s (lens-transform h-lens s (curry remove c))]
-                    [s (lens-transform state-discarded-lens s (curry add-played c))]
-                    [s (lens-transform state-hints-remaining-lens s (curry + 1))])
-               s))]
-          )))
 
 (define (init-deck)
   (define (flatmap f . ls) (apply append (apply map f ls)))
@@ -129,6 +68,10 @@
                                 '(1 2 3 4 5)
                                 '(3 2 2 2 1)
                                 )) colors))
+
+(define (hand-size-for-players num-players)
+  (cond [(<= 2 num-players 3) 5]
+        [(<= 4 num-players 5) 4]))
 
 (define (random-deck) (shuffle (init-deck)))
 
@@ -151,12 +94,90 @@
   (for ([num-players (in-list '(2 3 4 5))])
     (check-false (game-over? (init-game num-players (random-deck)))))
   )
+(define (hand-lens player)
+  (lens-compose
+   (list-ref-lens player)
+   state-player-hands-lens))
+
+(define (state-hand-size s)
+  (hand-size-for-players (state-num-players s)))
+
+(define (state-num-players s)
+  (length (state-player-hands s)))
+
+;; is card c playable in state s?
+(define (state-playable? s c)
+  (playable? (state-played s) c))
+
+(define (game-over? s)
+  (define expected-hand-size (state-hand-size s))
+  (or
+   (>= (length (state-misplayed s)) 3)
+   (eq? (* 5 (length colors)) (num-played (state-played s)))
+   (andmap (lambda (cards) (< (length cards) expected-hand-size))
+           (state-player-hands s))))
+
+;; actions
+(struct play (card-idx) #:transparent)
+(struct discard (card-idx) #:transparent)
+(struct hint (player number-or-color) #:transparent)
+
+(struct invalid-move (reason) #:transparent)
+(struct hint-result (hint matches) #:transparent)
+
+(define (matching-indices hand number-or-color)
+  (indexes-where hand (lambda (c)
+                        (eq? number-or-color
+                             (cond [(color? number-or-color) (card-color c)]
+                                   [else (card-number c)])))))
+
+(define (state-deck-draw s)
+  (let ([deck (state-deck s)])
+    (values (cdr deck) (car deck))))
+
+(define (make-move s p action)
+  (let/cc return
+    (define (bad-move reason) (return (invalid-move reason)))
+    (define (done s info)
+      (return
+       (list (lens-set state-current-player-lens s
+                       (modulo (+ p 1) (state-num-players s)))) info))
+    (unless (eq? (state-current-player s) p)
+      (bad-move "out-of-turn"))
+    (when (game-over? s) (done "game is over"))
+    (define h-lens (hand-lens p))
+    (match action
+      [(play c-idx)
+       (let ([h-lens (hand-lens p)])
+         (when (>= c-idx (length (lens-view h-lens s)))
+           (bad-move "play index out-of-bounds"))
+         (define c (list-ref (lens-view h-lens s) c-idx))
+         (let* ([s (lens-transform h-lens s (curry remove c))]
+                [s (if (state-playable? s c)
+                       (lens-transform state-played-lens s (curry add-played c))
+                       (lens-transform state-misplayed-lens s (curry add-played c)))])
+           (done s #f)))]
+      [(discard c-idx)
+       ;; TODO: merge with play
+       (when (>= c-idx (length (lens-view h-lens s)))
+         (bad-move "discard index out-of-bounds"))
+       (when (eq? 8 (state-hints-remaining s))
+         (bad-move "cannot discard with full hints"))
+       (define c (list-ref (lens-view h-lens s) c-idx))
+       (let* ([s (lens-transform h-lens s (curry remove c))]
+              [s (lens-transform state-discarded-lens s (curry add-played c))]
+              [s (lens-transform state-hints-remaining-lens s (curry + 1))])
+         (done s #f))]
+      [(struct* hint ((player hinted-player) (number-or-color hint-val)))
+       (let* ([target-hand (lens-view (hand-lens hinted-player) s)]
+              [indices (matching-indices target-hand hint-val)])
+         (when (null? indices) (bad-move "hint that indicates no cards"))
+         (done s (hint-result hint-val indices)))])))
 
 (provide random-deck init-game make-move
          ;; types
          (struct-out state) ; TODO: don't export private information
          (struct-out card)
-         (struct-out play)
-         (struct-out discard)
-         (struct-out hint)
+         (struct-out play) (struct-out discard) (struct-out hint)
+         (struct-out hint-result)
          (struct-out invalid-move))

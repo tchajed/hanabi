@@ -12,10 +12,39 @@
 (define empty-card-set '())
 (define (playable? card-set c)
   (define (same-color? c2) (eq? (card-color c) (card-color c2)))
-  (define highest-played (apply max 0 . (filter same-color? card-set)))
+  (define color-stack (filter-map
+                       (λ (c) (if (same-color? c) (card-number c) #f))
+                       card-set))
+  (define highest-played (apply max 0 color-stack))
   (eq? (card-number c) (+ 1 highest-played)))
 (define (add-played c card-set) (cons c card-set))
 (define (num-played card-set) (length card-set))
+
+(module+ test
+  (require rackunit)
+  (check-true  (playable? empty-card-set (card 'yellow 1)))
+  (check-true  (playable? empty-card-set (card 'blue 1)))
+  (check-false (playable? empty-card-set (card 'blue 2)))
+  (check-false (playable? empty-card-set (card 'blue 3)))
+
+  (define cards
+    (foldr add-played empty-card-set
+           (list
+            (card 'yellow 1)
+            (card 'blue 1)
+            (card 'red 1) (card 'yellow 2)
+            (card 'red 2))))
+  (define playable-cards
+    (list
+     (card 'yellow 3)
+     (card 'blue 2)
+     (card 'green 1)
+     (card 'red 3)))
+  (define all-cards (for/list ([color (in-list colors)]
+                               [number (in-list '(1 2 3 4 5))])
+                      (card color number)))
+  (for ([c (in-list all-cards)])
+    (check-eq? (playable? cards c) (member c playable-cards))))
 
 (struct/lens state
              (deck played discarded misplayed player-hands ; disjoint subsets of cards

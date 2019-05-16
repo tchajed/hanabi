@@ -24,9 +24,11 @@ before_install:
   - cat travis-racket/install-racket.sh | bash # pipe to bash not sh!
   - export PATH="${RACKET_DIR}/bin:${PATH}" #install-racket.sh can't set for us
 
+install:
+  - raco pkg install --auto lens
+
 # Here supply steps such as raco make, raco test, etc.
 script:
-  - raco pkg install --auto lens
   - raco make hanabi.rkt
   - raco test .
 

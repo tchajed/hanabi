@@ -154,8 +154,9 @@
 
 (provide random-deck init-game make-move
          ;; types
-         (struct-out state)
+         (struct-out state) ; TODO: don't export private information
          (struct-out card)
          (struct-out play)
          (struct-out discard)
-         (struct-out hint))
+         (struct-out hint)
+         (struct-out invalid-move))

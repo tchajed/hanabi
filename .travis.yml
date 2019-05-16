@@ -25,13 +25,13 @@ before_install:
   - export PATH="${RACKET_DIR}/bin:${PATH}" #install-racket.sh can't set for us
 
 install:
-  - raco pkg install --auto lens
+  - raco pkg install --deps search-auto
 
-# Here supply steps such as raco make, raco test, etc.
 script:
-  - raco make hanabi.rkt
-  - raco test .
+  - raco setup -D --check-pkg-deps hanabi
+  - raco test -x -p hanabi
 
+# build with raco make, raco test
 # OR: If your repo is a Racket package with an info.rkt that includes
 # some `deps`:
 #

@@ -145,3 +145,17 @@
            ;; played discarded misplayed
            empty-card-set empty-card-set empty-card-set
            player-hands 8 0)))
+
+(module+ test
+  (random-seed 0)
+  (for ([num-players (in-list '(2 3 4 5))])
+    (check-false (game-over? (init-game num-players (random-deck)))))
+  )
+
+(provide random-deck init-game make-move
+         ;; types
+         (struct-out state)
+         (struct-out card)
+         (struct-out play)
+         (struct-out discard)
+         (struct-out hint))

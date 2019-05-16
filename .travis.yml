@@ -17,7 +17,6 @@ env:
     #
     # The RELEASE snapshot is only available during the release process.
     - RACKET_VERSION=7.2
-    - RACKET_VERSION=HEAD
 
 
 before_install:

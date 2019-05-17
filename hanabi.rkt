@@ -43,7 +43,7 @@
      (card 'green 1)
      (card 'red 3)))
   (define all-cards (for*/list ([color (in-list colors)]
-                               [number (in-list '(1 2 3 4 5))])
+                                [number (in-list '(1 2 3 4 5))])
                       (card color number)))
   (for ([c (in-list all-cards)])
     (define expected (not (eq? (member c playable-cards) #f)))
@@ -80,7 +80,7 @@
          [new-card (car deck)]
          [s (state-deck-set s (cdr deck))]
          [s (lens-transform (hand-lens p) s (curry cons new-card))])
-         s))
+    s))
 
 (define (random-deck) (shuffle (init-deck)))
 

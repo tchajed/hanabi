@@ -3,12 +3,12 @@
 (require racket/struct)
 (require lens)
 
-(define colors '(yellow red blue green))
+(define colors '(yellow red blue green white rainbow))
 (define (color? c) (member c colors))
 
-(struct/lens card (color number) #:transparent
+(struct card (color number) #:transparent
              ;; TODO: add contracts for color and number
-             )
+  )
 
 ;; Lists as a data structure for a set of cards
 (define empty-card-set '())
@@ -29,26 +29,27 @@
   (check-false (playable? empty-card-set (card 'blue 2)))
   (check-false (playable? empty-card-set (card 'blue 3)))
 
-  (define cards
-    (foldr add-played empty-card-set
-           (list
-            (card 'yellow 1)
-            (card 'blue 1)
-            (card 'red 1) (card 'yellow 2)
-            (card 'red 2))))
-  (define playable-cards
-    (list
-     (card 'yellow 3)
-     (card 'blue 2)
-     (card 'green 1)
-     (card 'red 3)))
-  (define all-cards (for*/list ([color (in-list colors)]
-                                [number (in-list '(1 2 3 4 5))])
-                      (card color number)))
-  (for ([c (in-list all-cards)])
-    (define expected (not (eq? (member c playable-cards) #f)))
-    ((if (member c playable-cards) check-true check-false)
-     (playable? cards c) c)))
+  (let ([cards
+         (foldr add-played empty-card-set
+                (list
+                 (card 'yellow 1)
+                 (card 'blue 1)
+                 (card 'red 1) (card 'yellow 2)
+                 (card 'red 2)))]
+        [playable-cards
+         (list
+          (card 'yellow 3)
+          (card 'blue 2)
+          (card 'green 1)
+          (card 'red 3))]
+        [all-cards (for*/list ([color (in-list colors)]
+                               [number (in-list '(1 2 3 4 5))])
+                     (card color number))])
+    (for ([c (in-list all-cards)])
+      (define expected (not (eq? (member c playable-cards) #f)))
+      ((if (member c playable-cards) check-true check-false)
+       (playable? cards c) c))
+    ))
 
 (struct/lens state
              (deck played discarded misplayed player-hands ; disjoint subsets of cards
@@ -59,6 +60,7 @@
 ;; played, discarded, misplayed, and player-hands are card-sets.
 ;;  They are represented with a list but access goes through the API above.
 ;; player-hands is a list of lists of cards
+;;  TODO: include information players know about their own hands
 ;; hints-remaining is an int in [0, 8]
 ;; current-player is a player index
 
@@ -180,6 +182,45 @@
               [indices (matching-indices target-hand hint-val)])
          (when (null? indices) (bad-move "hint that indicates no cards"))
          (done s (hint-result hint-val indices)))])))
+
+(module+ test
+  (define (shorthand->card short-symbol)
+    (define short (symbol->string short-symbol))
+    (define color-code (string-ref short 0))
+    (define number-code (string-ref short 1))
+    (card (dict-ref '((#\y . yellow)
+                      (#\g . green)
+                      (#\b . blue)
+                      (#\r . red)
+                      (#\w . white)
+                      (#\a . rainbow)) color-code)
+          (dict-ref '((#\1 . 1) (#\2 . 2) (#\3 . 3) (#\4 . 4) (#\5 . 5)) number-code)))
+
+  (define (shorthand->cards shorts)
+    (map shorthand->card shorts))
+
+  (check-equal? (shorthand->cards '(y1 g2 r3 y4 b2 w1))
+                (list (card 'yellow 1)
+                      (card 'green 2)
+                      (card 'red 3)
+                      (card 'yellow 4)
+                      (card 'blue 2)
+                      (card 'white 1)))
+
+  (define (complete-deck partial-deck)
+    (for/fold ([remaining-deck (init-deck)]
+               #:result (append partial-deck remaining-deck))
+              ([card (in-list partial-deck)])
+      (remove card remaining-deck)))
+  (check-equal? (length (init-deck))
+                (length (complete-deck (shorthand->cards '(y1 g3)))))
+  (check-equal? (length (init-deck))
+                (length (complete-deck (shorthand->cards '(y1 g3 y1)))))
+
+
+  (init-game 3 (complete-deck (shorthand->cards '(y1 g3 b2 g4
+                                                  b2 r1 w1))))
+  )
 
 (provide random-deck init-game make-move
          ;; types

@@ -140,7 +140,7 @@
 
 (define (matching-indices hand number-or-color)
   (indexes-where hand (lambda (c)
-                        (eq? number-or-color
+                        (equal? number-or-color
                              (cond [(color? number-or-color) (card-color c)]
                                    [else (card-number c)])))))
 
@@ -149,8 +149,8 @@
     (define (bad-move reason) (return (invalid-move reason)))
     (define (done s info)
       (return
-       (list (lens-set state-current-player-lens s
-                       (modulo (+ p 1) (state-num-players s)))) info))
+       (cons (lens-set state-current-player-lens s
+                       (modulo (+ p 1) (state-num-players s))) info)))
     (unless (eq? (state-current-player s) p)
       (bad-move "out-of-turn"))
     (when (game-over? s) (done "game is over"))
@@ -180,6 +180,7 @@
               [s (state-deck-draw s p)])
          (done s #f))]
       [(struct* hint ((player hinted-player) (number-or-color hint-val)))
+       (when (eq? p hinted-player) (bad-move "cannot hint self"))
        (let* ([target-hand (lens-view (hand-lens hinted-player) s)]
               [indices (matching-indices target-hand hint-val)])
          (when (null? indices) (bad-move "hint that indicates no cards"))
@@ -219,13 +220,22 @@
   (check-equal? (length (init-deck))
                 (length (complete-deck (shorthand->cards '(y1 g3 y1)))))
 
-
   (define s0
     (let ([cards '(
-                   y1 g3 b2 g4
-                   b2 r1 w1 r2
-                   r3 w1 b1 b3)])
-      (init-game 3 (complete-deck (shorthand->cards cards))))))
+                   ;; note these hands are reversed due to draw order
+                   y1 g3 b2 g4 w2
+                   w5 b2 r1 w1 r2
+                   r3 w1 b1 b3 w3)])
+      (init-game 3 (complete-deck (shorthand->cards cards)))))
+  (check-equal? (cdr (make-move s0 0 (hint 1 'red))) (hint-result 'red '(0 2)))
+  (check-equal? (cdr (make-move s0 0 (hint 1 5))) (hint-result 5 '(4)))
+  ;; out-of-turn
+  (check-pred invalid-move? (make-move s0 1 (hint 0 'blue)))
+  ;; self hint
+  (check-pred invalid-move? (make-move s0 0 (hint 0 'blue)))
+  ;; no cards
+  (check-pred invalid-move? (make-move s0 0 (hint 2 'green)))
+  )
 
 (provide random-deck init-game make-move
          ;; types

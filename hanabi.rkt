@@ -7,7 +7,7 @@
 (define (color? c) (member c colors))
 
 (struct card (color number) #:transparent
-             ;; TODO: add contracts for color and number
+  ;; TODO: add contracts for color and number
   )
 
 ;; Lists as a data structure for a set of cards
@@ -41,7 +41,9 @@
           (card 'yellow 3)
           (card 'blue 2)
           (card 'green 1)
-          (card 'red 3))]
+          (card 'red 3)
+          (card 'white 1)
+          (card 'rainbow 1))]
         [all-cards (for*/list ([color (in-list colors)]
                                [number (in-list '(1 2 3 4 5))])
                      (card color number))])
@@ -218,9 +220,12 @@
                 (length (complete-deck (shorthand->cards '(y1 g3 y1)))))
 
 
-  (init-game 3 (complete-deck (shorthand->cards '(y1 g3 b2 g4
-                                                  b2 r1 w1))))
-  )
+  (define s0
+    (let ([cards '(
+                   y1 g3 b2 g4
+                   b2 r1 w1 r2
+                   r3 w1 b1 b3)])
+      (init-game 3 (complete-deck (shorthand->cards cards))))))
 
 (provide random-deck init-game make-move
          ;; types
